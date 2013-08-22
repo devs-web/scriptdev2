@@ -1,5 +1,4 @@
 /* Copyright (C) 2006 - 2013 ScriptDev2 <http://www.scriptdev2.com/>
- * Copyright (C) 2011 - 2013 MangosR2 <http://github.com/mangosR2/>
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -17,8 +16,8 @@
 
 /* ScriptData
 SDName: Boss_Kalecgos
-SD%Complete: 95
-SDComment: Timers; spell 44852 prevent attack players to Sathrovarr
+SD%Complete: 70
+SDComment: Timers;
 SDCategory: Sunwell Plateau
 EndScriptData */
 
@@ -51,7 +50,7 @@ enum
 
     // Kalecgos
     SPELL_SPECTRAL_BLAST            = 44869,
-    SPELL_SPECTRAL_REALM_EJECT      = 44845,        // pull the players ouside the spectral realm in case of wipe
+    SPELL_SPECTRAL_REALM_NOTIFY     = 44845,        // cast by the players on teleport to notify boss
     SPELL_ARCANE_BUFFET             = 45018,
     SPELL_FROST_BREATH              = 44799,
     SPELL_TAIL_LASH                 = 45122,
@@ -67,15 +66,16 @@ enum
     SPELL_CURSE_OF_BOUNDLESS_AGONY  = 45032,
     SPELL_SHADOW_BOLT_VOLLEY        = 45031,
 
-    SPELL_TELEPORT_NORMAL_REALM     = 46020,
-    SPELL_SPECTRAL_REALM_AURA       = 46021,
-    SPELL_SPECTRAL_EXHAUSTION       = 44867,
-
     // Misc
     SPELL_BANISH                    = 44836
 };
 
 static const uint32 aWildMagicSpells[6] = {44978, 45001, 45002, 45004, 45006, 45010};
+static const float aKalecHumanLoc[4] = {1709.094f, 927.5035f, -74.28364f, 2.932153f};
+
+/*######
+## boss_kalecgos
+######*/
 
 struct MANGOS_DLL_DECL boss_kalecgosAI : public ScriptedAI
 {
@@ -98,7 +98,7 @@ struct MANGOS_DLL_DECL boss_kalecgosAI : public ScriptedAI
     bool m_bIsBanished;
     bool m_bIsEnraged;
 
-    void Reset()
+    void Reset() override
     {
         m_uiArcaneBuffetTimer       = 8000;
         m_uiTailLashTimer           = 5000;
@@ -114,11 +114,11 @@ struct MANGOS_DLL_DECL boss_kalecgosAI : public ScriptedAI
 
     void JustReachedHome() override
     {
-        // Eject all players and set event to fail
-        DoCastSpellIfCan(m_creature, SPELL_SPECTRAL_REALM_EJECT, CAST_TRIGGERED);
-
         if (m_pInstance)
+        {
+            m_pInstance->DoEjectSpectralPlayers();
             m_pInstance->SetData(TYPE_KALECGOS, FAIL);
+        }
     }
 
     void EnterEvadeMode() override
@@ -140,33 +140,32 @@ struct MANGOS_DLL_DECL boss_kalecgosAI : public ScriptedAI
         ScriptedAI::EnterEvadeMode();
     }
 
-    void Aggro(Unit* pWho)
+    void Aggro(Unit* /*pWho*/) override
     {
-        if (m_uiExitTimer || m_pInstance->GetData(TYPE_KALECGOS) == IN_PROGRESS) // prevent switch door if tank attack to friendly boss !
-            return;
-
         DoScriptText(SAY_EVIL_AGGRO, m_creature);
 
         if (m_pInstance)
             m_pInstance->SetData(TYPE_KALECGOS, IN_PROGRESS);
     }
 
-    void DamageTaken(Unit* pDoneBy, uint32& uiDamage) override
+    void DamageTaken(Unit* /*pDoneBy*/, uint32& uiDamage) override
     {
         if (uiDamage > m_creature->GetHealth())
         {
             uiDamage = 0;
 
             // If Sathrovarr is not banished yet, then banish the boss
-            if (DoCastSpellIfCan(m_creature, SPELL_BANISH, CAST_TRIGGERED) == CAST_OK)
-                m_bIsBanished = true;
-
-            if (m_bIsUncorrupted && !m_uiExitTimer)
+            if (!m_bIsUncorrupted)
+            {
+                if (DoCastSpellIfCan(m_creature, SPELL_BANISH, CAST_TRIGGERED) == CAST_OK)
+                    m_bIsBanished = true;
+            }
+            else
                 DoStartOutro();
         }
     }
 
-    void KilledUnit(Unit* pVictim) override
+    void KilledUnit(Unit* /*pVictim*/) override
     {
         DoScriptText(urand(0, 1) ? SAY_EVIL_SLAY_1 : SAY_EVIL_SLAY_2, m_creature);
     }
@@ -201,11 +200,17 @@ struct MANGOS_DLL_DECL boss_kalecgosAI : public ScriptedAI
 
         if (uiPointId)
         {
-            if (m_pInstance && m_pInstance->GetData(TYPE_KALECGOS) == IN_PROGRESS)
+            if (m_pInstance)
                 m_pInstance->SetData(TYPE_KALECGOS, DONE);
 
             m_creature->ForcedDespawn(1000);
         }
+    }
+
+    void ReceiveAIEvent(AIEventType eventType, Creature* /*pSender*/, Unit* pInvoker, uint32 /*uiMiscValue*/) override
+    {
+        if (eventType == AI_EVENT_CUSTOM_A && m_pInstance)
+            m_pInstance->AddToSpectralRealm(pInvoker->GetObjectGuid());
     }
 
     void UpdateAI(const uint32 uiDiff) override
@@ -225,7 +230,6 @@ struct MANGOS_DLL_DECL boss_kalecgosAI : public ScriptedAI
             }
             else
                 m_uiExitTimer -= uiDiff;
-            return;
         }
 
         if (!m_creature->SelectHostileTarget() || !m_creature->getVictim())
@@ -251,10 +255,6 @@ struct MANGOS_DLL_DECL boss_kalecgosAI : public ScriptedAI
                 // Spell is targeting both bosses
                 if (DoCastSpellIfCan(m_creature, SPELL_CRAZED_RAGE) == CAST_OK)
                     m_bIsEnraged = true;
-
-                // also enrage sathrovarr
-                if (Creature* pSathrovarr = m_pInstance->GetSingleCreatureFromStorage(NPC_SATHROVARR))
-                    pSathrovarr->CastSpell(pSathrovarr, SPELL_CRAZED_RAGE, true);
             }
         }
 
@@ -303,23 +303,21 @@ struct MANGOS_DLL_DECL boss_kalecgosAI : public ScriptedAI
         else
             m_uiWildMagicTimer -= uiDiff;
 
-        if (!m_bIsUncorrupted)
+        if (m_uiSpectralBlastTimer < uiDiff)
         {
-            if (m_uiSpectralBlastTimer < uiDiff)
-            {
-                if (Unit* pTarget = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 1, uint32(0), SELECT_FLAG_PLAYER))
-                {
-                    if (!pTarget->HasAura(SPELL_SPECTRAL_EXHAUSTION) && !pTarget->HasAura(SPELL_SPECTRAL_REALM_AURA) && DoCastSpellIfCan(pTarget, SPELL_SPECTRAL_BLAST) == CAST_OK)
-                        m_uiSpectralBlastTimer = urand(15000, 25000);
-                }
-            }
-            else
-                m_uiSpectralBlastTimer -= uiDiff;
+            if (DoCastSpellIfCan(m_creature, SPELL_SPECTRAL_BLAST) == CAST_OK)
+                m_uiSpectralBlastTimer = 25000;
         }
+        else
+            m_uiSpectralBlastTimer -= uiDiff;
 
         DoMeleeAttackIfReady();
     }
 };
+
+/*######
+## boss_sathrovarr
+######*/
 
 struct MANGOS_DLL_DECL boss_sathrovarrAI : public ScriptedAI
 {
@@ -337,7 +335,7 @@ struct MANGOS_DLL_DECL boss_sathrovarrAI : public ScriptedAI
     bool m_bIsBanished;
     bool m_bIsEnraged;
 
-    void Reset()
+    void Reset() override
     {
         // FIXME: Timers
         m_uiCorruptingStrikeTimer       = 5000;
@@ -350,24 +348,27 @@ struct MANGOS_DLL_DECL boss_sathrovarrAI : public ScriptedAI
         DoCastSpellIfCan(m_creature, SPELL_SPECTRAL_INVISIBILITY);
     }
 
-    void Aggro(Unit* pWho)
+    void Aggro(Unit* /*pWho*/) override
     {
         DoScriptText(SAY_SATH_AGGRO, m_creature);
 
         if (!m_pInstance)
             return;
 
-        // Human Kalec starts to attack too
-        if (Creature* pKalec = m_pInstance->GetSingleCreatureFromStorage(NPC_KALECGOS_HUMAN))
-            pKalec->AI()->AttackStart(m_creature);
+        // spawn human Kalec; he starts to attack
+        m_creature->SummonCreature(NPC_KALECGOS_HUMAN, aKalecHumanLoc[0], aKalecHumanLoc[1], aKalecHumanLoc[2], aKalecHumanLoc[3], TEMPSUMMON_DEAD_DESPAWN, 0, true);
     }
 
-    void DamageTaken(Unit* pDoneBy, uint32& uiDamage) override
+    void DamageTaken(Unit* /*pDoneBy*/, uint32& uiDamage) override
     {
         if (uiDamage > m_creature->GetHealth())
         {
             uiDamage = 0;
 
+            if (m_bIsBanished)
+                return;
+
+            // banish Sathrovarr and eject the players
             if (DoCastSpellIfCan(m_creature, SPELL_BANISH, CAST_TRIGGERED) == CAST_OK)
                 m_bIsBanished = true;
 
@@ -376,12 +377,11 @@ struct MANGOS_DLL_DECL boss_sathrovarrAI : public ScriptedAI
 
             if (Creature* pKalecgos = m_pInstance->GetSingleCreatureFromStorage(NPC_KALECGOS_DRAGON))
             {
-                // Eject all players and set Kalec to uncorrupted
-                pKalecgos->CastSpell(pKalecgos, SPELL_SPECTRAL_REALM_EJECT, true);
-
                 if (boss_kalecgosAI* pKalecgosAI = dynamic_cast<boss_kalecgosAI*>(pKalecgos->AI()))
                     pKalecgosAI->m_bIsUncorrupted = true;
             }
+
+            m_pInstance->DoEjectSpectralPlayers();
         }
     }
 
@@ -397,15 +397,39 @@ struct MANGOS_DLL_DECL boss_sathrovarrAI : public ScriptedAI
         }
     }
 
-    void JustReachedHome() override
+    void MoveInLineOfSight(Unit* pWho) override
     {
-        //TODO: must be invisible in reset() but not work!!!
-        DoCastSpellIfCan(m_creature, SPELL_SPECTRAL_INVISIBILITY);
+        // !!! Workaround which ejects the players from the spectral realm !!!
+        if (pWho->GetTypeId() == TYPEID_PLAYER && pWho->IsWithinLOSInMap(m_creature) && pWho->IsWithinDistInMap(m_creature, 75.0f))
+        {
+            if (!pWho->HasAura(SPELL_SPECTRAL_REALM_AURA))
+            {
+                pWho->CastSpell(pWho, SPELL_TELEPORT_NORMAL_REALM, true);
+                pWho->CastSpell(pWho, SPELL_SPECTRAL_EXHAUSTION, true);
+
+                if (m_pInstance)
+                    m_pInstance->RemoveFromSpectralRealm(pWho->GetObjectGuid());
+            }
+        }
+
+        ScriptedAI::MoveInLineOfSight(pWho);
     }
 
-    void JustDied(Unit* pKiller) override
+    void JustDied(Unit* /*pKiller*/) override
     {
         DoScriptText(SAY_SATH_DEATH, m_creature);
+    }
+
+    void JustSummoned(Creature* pSummoned) override
+    {
+        if (pSummoned->GetEntry() == NPC_KALECGOS_HUMAN)
+            pSummoned->AI()->AttackStart(m_creature);
+    }
+
+    void ReceiveAIEvent(AIEventType eventType, Creature* /*pSender*/, Unit* pInvoker, uint32 /*uiMiscValue*/) override
+    {
+        if (eventType == AI_EVENT_CUSTOM_A && m_pInstance)
+            m_pInstance->AddToSpectralRealm(pInvoker->GetObjectGuid());
     }
 
     void UpdateAI(const uint32 uiDiff) override
@@ -423,12 +447,9 @@ struct MANGOS_DLL_DECL boss_sathrovarrAI : public ScriptedAI
                 m_bIsEnraged = true;
             else
             {
+                // Spell is targeting both bosses
                 if (DoCastSpellIfCan(m_creature, SPELL_CRAZED_RAGE) == CAST_OK)
                     m_bIsEnraged = true;
-
-                // also enrage kalecgos
-                if (Creature* pKalecgos = m_pInstance->GetSingleCreatureFromStorage(NPC_KALECGOS_DRAGON))
-                    pKalecgos->CastSpell(pKalecgos, SPELL_CRAZED_RAGE, true);
             }
         }
 
@@ -473,6 +494,10 @@ struct MANGOS_DLL_DECL boss_sathrovarrAI : public ScriptedAI
     }
 };
 
+/*######
+## boss_kalecgos_humanoid
+######*/
+
 struct MANGOS_DLL_DECL boss_kalecgos_humanoidAI : public ScriptedAI
 {
     boss_kalecgos_humanoidAI(Creature* pCreature) : ScriptedAI(pCreature)
@@ -485,17 +510,15 @@ struct MANGOS_DLL_DECL boss_kalecgos_humanoidAI : public ScriptedAI
 
     uint32 m_uiRevitalizeTimer;
     uint32 m_uiHeroicStrikeTimer;
-    uint32 m_uiUpdateRealmTimer;
 
     bool m_bHasYelled10Percent;
     bool m_bHasYelled20Percent;
 
-    void Reset()
+    void Reset() override
     {
         // TODO: Times!
         m_uiRevitalizeTimer     = 30000;
         m_uiHeroicStrikeTimer   = 8000;
-        m_uiUpdateRealmTimer    = 1000;
 
         m_bHasYelled10Percent   = false;
         m_bHasYelled20Percent   = false;
@@ -503,59 +526,22 @@ struct MANGOS_DLL_DECL boss_kalecgos_humanoidAI : public ScriptedAI
         DoCastSpellIfCan(m_creature, SPELL_SPECTRAL_INVISIBILITY);
     }
 
-    void Aggro(Unit* pWho)
+    void Aggro(Unit* /*pWho*/) override
     {
         DoScriptText(SAY_GOOD_AGGRO, m_creature);
     }
 
-    void JustDied(Unit* pKiller) override
+    void JustDied(Unit* /*pKiller*/) override
     {
         if (m_pInstance)
         {
-            if (Creature* pKalecgos = m_pInstance->GetSingleCreatureFromStorage(NPC_KALECGOS_DRAGON))
-                pKalecgos->CastSpell(pKalecgos, SPELL_SPECTRAL_REALM_EJECT, true);
-
+            m_pInstance->DoEjectSpectralPlayers();
             m_pInstance->SetData(TYPE_KALECGOS, FAIL);
         }
     }
 
-    void DoUpdateRealm()
-    {
-        // eject the players from the spectral realm
-        Map* pMap = m_creature->GetMap();
-        if (!pMap->IsDungeon())
-            return;
-        Map::PlayerList const &PlayerList = pMap->GetPlayers();
-
-        if (PlayerList.isEmpty())
-            return;
-
-        for (Map::PlayerList::const_iterator i = PlayerList.begin(); i != PlayerList.end(); ++i)
-        {
-            if (i->getSource()->HasAura(SPELL_SPECTRAL_REALM_AURA) || !i->getSource()->IsWithinDistInMap(m_creature, 75.0f) || i->getSource()->isGameMaster())
-                continue;
-            i->getSource()->CastSpell(i->getSource(), SPELL_TELEPORT_NORMAL_REALM, true);
-            i->getSource()->CastSpell(i->getSource(), SPELL_SPECTRAL_EXHAUSTION, true);
-        }
-
-    }
-
-    void JustReachedHome() override
-    {
-        //TODO: must be invisible in reset() but not work!!!
-        DoCastSpellIfCan(m_creature, SPELL_SPECTRAL_INVISIBILITY);
-    }
-
     void UpdateAI(const uint32 uiDiff) override
     {
-        if (m_uiUpdateRealmTimer < uiDiff)
-        {
-            DoUpdateRealm();
-            m_uiHeroicStrikeTimer = 1000;
-        }
-        else
-            m_uiUpdateRealmTimer -= uiDiff;
-
         if (!m_creature->SelectHostileTarget() || !m_creature->getVictim())
             return;
 
@@ -607,6 +593,19 @@ CreatureAI* GetAI_boss_kalecgos_humanoid(Creature* pCreature)
     return new boss_kalecgos_humanoidAI(pCreature);
 }
 
+bool EffectDummyCreature_spell_spectral_realm_notify(Unit* pCaster, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget, ObjectGuid /*originalCasterGuid*/)
+{
+    if (uiSpellId == SPELL_SPECTRAL_REALM_NOTIFY && uiEffIndex == EFFECT_INDEX_0)
+    {
+        if (pCaster->GetTypeId() == TYPEID_PLAYER)
+            pCreatureTarget->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, pCaster, pCreatureTarget);
+
+        return true;
+    }
+
+    return true;
+}
+
 void AddSC_boss_kalecgos()
 {
     Script* pNewScript;
@@ -614,15 +613,18 @@ void AddSC_boss_kalecgos()
     pNewScript = new Script;
     pNewScript->Name = "boss_kalecgos";
     pNewScript->GetAI = &GetAI_boss_kalecgos;
+    pNewScript->pEffectDummyNPC = &EffectDummyCreature_spell_spectral_realm_notify;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
     pNewScript->Name = "boss_sathrovarr";
     pNewScript->GetAI = &GetAI_boss_sathrovarr;
+    pNewScript->pEffectDummyNPC = &EffectDummyCreature_spell_spectral_realm_notify;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
     pNewScript->Name = "boss_kalecgos_humanoid";
     pNewScript->GetAI = &GetAI_boss_kalecgos_humanoid;
+    pNewScript->pEffectDummyNPC = &EffectDummyCreature_spell_spectral_realm_notify;
     pNewScript->RegisterSelf();
 }

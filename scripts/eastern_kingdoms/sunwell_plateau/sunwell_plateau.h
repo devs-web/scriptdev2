@@ -1,5 +1,4 @@
 /* Copyright (C) 2006 - 2013 ScriptDev2 <http://www.scriptdev2.com/>
- * Copyright (C) 2011 - 2013 MangosR2 <http://github.com/mangosR2/>
  * This program is free software licensed under GPL version 2
  * Please see the included DOCS/LICENSE.TXT for more information */
 
@@ -22,9 +21,12 @@ enum
     NPC_SATHROVARR              = 24892,
     NPC_MADRIGOSA               = 24895,
     NPC_FLIGHT_TRIGGER_LEFT     = 25357,            // Related to Felmyst flight path. Also the anchor to summon Madrigosa
-    // NPC_FLIGHT_TRIGGER_RIGHT = 25358,            // related to Felmyst flight path
+    NPC_FLIGHT_TRIGGER_RIGHT    = 25358,            // related to Felmyst flight path
+    NPC_WORLD_TRIGGER           = 22515,
+    NPC_WORLD_TRIGGER_LARGE     = 23472,            // ground triggers spawned in Brutallus / Felmyst arena
     NPC_BRUTALLUS               = 24882,
     NPC_FELMYST                 = 25038,
+    NPC_KALECGOS_MADRIGOSA      = 24844,            // kalecgos blue dragon; spawns after Felmyst
     NPC_ALYTHESS                = 25166,
     NPC_SACROLASH               = 25165,
     NPC_MURU                    = 25741,
@@ -47,12 +49,11 @@ enum
     GO_MURU_ENTER_GATE          = 187990,           // muru gates
     GO_MURU_EXIT_GATE           = 188118,
     GO_THIRD_GATE               = 187765,           // door after muru; why another?
-    GO_ORB_OF_THE_BLUE_FLIGHT   = 188415,
 
-    GO_ORB_BLUE_FLIGHT_1        = 187869,           // orbs used in the Kil'jaeden fight
-    GO_ORB_BLUE_FLIGHT_2        = 188114,
-    GO_ORB_BLUE_FLIGHT_3        = 188115,
-    GO_ORB_BLUE_FLIGHT_4        = 188116,
+    GO_ORB_BLUE_FLIGHT_1        = 188115,           // orbs used in the Kil'jaeden fight
+    GO_ORB_BLUE_FLIGHT_2        = 188116,
+    GO_ORB_BLUE_FLIGHT_3        = 187869,
+    GO_ORB_BLUE_FLIGHT_4        = 188114,
 
     SAY_KALECGOS_OUTRO          = -1580043,
     SAY_TWINS_INTRO             = -1580044,
@@ -66,6 +67,10 @@ enum
 
     AREATRIGGER_TWINS           = 4937,
 
+    // Kalec spectral realm spells
+    SPELL_TELEPORT_NORMAL_REALM = 46020,
+    SPELL_SPECTRAL_REALM_AURA   = 46021,
+    SPELL_SPECTRAL_EXHAUSTION   = 44867,
     // Felmyst ouro spell
     SPELL_OPEN_BACK_DOOR        = 46650,            // Opens the fire barrier - script effect for 46652
     // used by both muru and entropius
@@ -76,10 +81,19 @@ enum
     MAX_DECEIVERS               = 3
 };
 
-// Used to summon Felmyst in reload case. This is the place where Madrigosa is killed in the intro event
-static const float aMadrigosaGroundLoc[4] = {1459.35f, 636.81f, 19.94f, 4.88f};
-// Used as an anchor to move Madrigosa and Kalec during the cinematic
-static const float aMadrigosaFlyLoc[3] = {1459.35f, 636.81f, 59.234f};
+static const EventLocations aMadrigosaLoc[] =
+{
+    {1463.82f, 661.212f, 19.79f, 4.88f},            // reload spawn loc - the place where to spawn Felmyst
+    {1463.82f, 661.212f, 39.234f},                  // fly loc during the cinematig
+};
+
+static const EventLocations aKalecLoc[] =
+{
+    {1573.146f, 755.2025f, 99.524f, 3.59f},         // spawn loc
+    {1474.235f, 624.0703f, 29.325f},                // first move
+    {1511.655f, 550.7028f, 25.510f},                // open door
+    {1648.255f, 519.377f, 165.848f},                // fly away
+};
 
 class MANGOS_DLL_DECL instance_sunwell_plateau : public ScriptedInstance, private DialogueHelper
 {
@@ -94,18 +108,25 @@ class MANGOS_DLL_DECL instance_sunwell_plateau : public ScriptedInstance, privat
         void OnObjectCreate(GameObject* pGo) override;
         void OnCreatureCreate(Creature* pCreature) override;
         void OnCreatureDeath(Creature* pCreature) override;
-        void OnCreatureEvade(Creature* pCreature) override;
+        void OnCreatureEvade(Creature* pCreature);
 
         void SetData(uint32 uiType, uint32 uiData) override;
         uint32 GetData(uint32 uiType) const override;
 
         void Update(uint32 uiDiff) override;
 
+        ObjectGuid SelectFelmystFlightTrigger(bool bLeftSide, uint8 uiIndex);
+
+        void AddToSpectralRealm(ObjectGuid playerGuid) { m_spectralRealmPlayers.insert(playerGuid); }
+        void RemoveFromSpectralRealm(ObjectGuid playerGuid) { m_spectralRealmPlayers.erase(playerGuid); }
+        void DoEjectSpectralPlayers();
+
         const char* Save() const override { return m_strInstData.c_str(); }
         void Load(const char* chrIn) override;
 
     protected:
-        void JustDidDialogueStep(int32 iEntry);
+        void JustDidDialogueStep(int32 iEntry) override;
+        void DoSortFlightTriggers();
 
         uint32 m_auiEncounter[MAX_ENCOUNTER];
         std::string m_strInstData;
@@ -117,6 +138,11 @@ class MANGOS_DLL_DECL instance_sunwell_plateau : public ScriptedInstance, privat
         uint32 m_uiMuruBerserkTimer;
         uint32 m_uiKiljaedenYellTimer;
 
+        GuidSet m_spectralRealmPlayers;
+        GuidVector m_vRightFlightTriggersVect;
+        GuidVector m_vLeftFlightTriggersVect;
+        GuidList m_lAllFlightTriggersList;
+        GuidList m_lBackdoorTriggersList;
         GuidList m_lDeceiversGuidList;
 };
 #endif

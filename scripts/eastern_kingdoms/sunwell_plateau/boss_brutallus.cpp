@@ -1,5 +1,4 @@
 /* Copyright (C) 2006 - 2013 ScriptDev2 <http://www.scriptdev2.com/>
- * Copyright (C) 2011 - 2013 MangosR2 <http://github.com/mangosR2/>
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -69,10 +68,10 @@ enum
     SPELL_FROST_BREATH              = 45065,
     SPELL_ENCAPSULATE               = 44883,
     SPELL_FEL_FIREBALL              = 44844,                // Brutallus' spells
-    SPELL_FLAME_RING                = 44873,                // this spell should have a fire explosion when removed
+    SPELL_CLEAR_DEBUFFS             = 34098,
+    SPELL_FLAME_RING                = 44874,                // this spell should have a fire explosion when removed
     SPELL_CHARGE                    = 44884,
     SPELL_BREAK_ICE                 = 46637,                // Break the ice, open the door - dummy spell for 46638 and 47030
-    SPELL_FELBLAZE_VISUAL           = 45068,                // Visual transform aura
 
     POINT_MOVE_GROUND               = 1,
     POINT_MOVE_ICE_BLOCK            = 2,
@@ -125,7 +124,7 @@ struct MANGOS_DLL_DECL boss_brutallusAI : public ScriptedAI, private DialogueHel
     bool m_bCanDoMeleeAttack;
     bool m_bIsIntroInProgress;
 
-    void Reset()
+    void Reset() override
     {
         m_uiSlashTimer      = 11000;
         m_uiStompTimer      = 30000;
@@ -223,7 +222,7 @@ struct MANGOS_DLL_DECL boss_brutallusAI : public ScriptedAI, private DialogueHel
         {
             pSummoned->SetWalk(false);
             pSummoned->SetLevitate(true);
-            pSummoned->GetMotionMaster()->MovePoint(0, aMadrigosaFlyLoc[0], aMadrigosaFlyLoc[1], aMadrigosaFlyLoc[2], false);
+            pSummoned->GetMotionMaster()->MovePoint(0, aMadrigosaLoc[1].m_fX, aMadrigosaLoc[1].m_fY, aMadrigosaLoc[1].m_fZ, false);
         }
         else if (pSummoned->GetEntry() == NPC_BRUTALLUS_DEATH_CLOUD)
             pSummoned->CastSpell(pSummoned, SPELL_BRUTALLUS_DEATH_CLOUD, true);
@@ -244,9 +243,6 @@ struct MANGOS_DLL_DECL boss_brutallusAI : public ScriptedAI, private DialogueHel
         if (pTarget->GetEntry() == NPC_MADRIGOSA && pSpell->Id == SPELL_CHARGE)
         {
             DoScriptText(YELL_MADR_DEATH, pTarget);
-            pTarget->RemoveAllAuras();
-            pTarget->DeleteThreatList();
-            pTarget->CombatStop(true);
             pTarget->InterruptNonMeleeSpells(true);
             pTarget->SetHealth(0);
             pTarget->StopMoving();
@@ -255,7 +251,6 @@ struct MANGOS_DLL_DECL boss_brutallusAI : public ScriptedAI, private DialogueHel
             pTarget->ModifyAuraState(AURA_STATE_HEALTHLESS_20_PERCENT, false);
             pTarget->ModifyAuraState(AURA_STATE_HEALTHLESS_35_PERCENT, false);
             pTarget->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-            pTarget->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
             pTarget->ClearAllReactives();
             pTarget->GetMotionMaster()->Clear();
             pTarget->GetMotionMaster()->MoveIdle();
@@ -283,16 +278,12 @@ struct MANGOS_DLL_DECL boss_brutallusAI : public ScriptedAI, private DialogueHel
                     pMadrigosa->CastSpell(pMadrigosa, SPELL_FREEZE, true);
                 break;
             case YELL_MADR_INTRO:
-                SetCombatMovement(false);
                 if (Creature* pMadrigosa = m_pInstance->GetSingleCreatureFromStorage(NPC_MADRIGOSA))
-                {
-                    pMadrigosa->GetMotionMaster()->MovePoint(POINT_MOVE_GROUND, aMadrigosaGroundLoc[0], aMadrigosaGroundLoc[1], aMadrigosaGroundLoc[2]);
-                    m_creature->SetFacingTo(m_creature->GetAngle(pMadrigosa));
-                }
+                    pMadrigosa->GetMotionMaster()->MovePoint(POINT_MOVE_GROUND, aMadrigosaLoc[0].m_fX, aMadrigosaLoc[0].m_fY, aMadrigosaLoc[0].m_fZ);
                 break;
             case YELL_INTRO:
                 if (Creature* pMadrigosa = m_pInstance->GetSingleCreatureFromStorage(NPC_MADRIGOSA))
-                    pMadrigosa->AI()->AttackStart(m_creature);
+                    m_creature->AI()->AttackStart(pMadrigosa);
                 break;
             case SPELL_FROST_BREATH:
                 if (Creature* pMadrigosa = m_pInstance->GetSingleCreatureFromStorage(NPC_MADRIGOSA))
@@ -305,9 +296,12 @@ struct MANGOS_DLL_DECL boss_brutallusAI : public ScriptedAI, private DialogueHel
                 m_bCanDoMeleeAttack = false;
                 if (Creature* pMadrigosa = m_pInstance->GetSingleCreatureFromStorage(NPC_MADRIGOSA))
                 {
+                    pMadrigosa->GetMotionMaster()->MovePoint(POINT_MOVE_ICE_BLOCK, aMadrigosaLoc[1].m_fX, aMadrigosaLoc[1].m_fY, aMadrigosaLoc[1].m_fZ);
+                    pMadrigosa->HandleEmote(EMOTE_ONESHOT_LIFTOFF);
                     pMadrigosa->SetLevitate(true);
-                    pMadrigosa->GetMotionMaster()->MovePoint(POINT_MOVE_ICE_BLOCK, aMadrigosaFlyLoc[0], aMadrigosaFlyLoc[1], aMadrigosaFlyLoc[2]);
                 }
+                // Temporary! This will make Brutallus not follow Madrigosa through the air until mmaps are implemented
+                m_creature->GetMotionMaster()->MoveIdle();
                 break;
             case YELL_MADR_ICE_BLOCK:
                 if (Creature* pMadrigosa = m_pInstance->GetSingleCreatureFromStorage(NPC_MADRIGOSA))
@@ -315,6 +309,7 @@ struct MANGOS_DLL_DECL boss_brutallusAI : public ScriptedAI, private DialogueHel
                 m_uiMadrigosaSpellTimer = 2000;
                 break;
             case SPELL_FLAME_RING:
+                DoCastSpellIfCan(m_creature, SPELL_CLEAR_DEBUFFS, CAST_TRIGGERED);
                 DoCastSpellIfCan(m_creature, SPELL_FLAME_RING, CAST_TRIGGERED);
                 break;
             case YELL_INTRO_BREAK_ICE:
@@ -326,7 +321,7 @@ struct MANGOS_DLL_DECL boss_brutallusAI : public ScriptedAI, private DialogueHel
                 break;
             case POINT_MOVE_GROUND:
                 if (Creature* pMadrigosa = m_pInstance->GetSingleCreatureFromStorage(NPC_MADRIGOSA))
-                    pMadrigosa->GetMotionMaster()->MovePoint(POINT_MOVE_GROUND, aMadrigosaGroundLoc[0], aMadrigosaGroundLoc[1], aMadrigosaGroundLoc[2]);
+                    pMadrigosa->GetMotionMaster()->MovePoint(POINT_MOVE_GROUND, aMadrigosaLoc[0].m_fX, aMadrigosaLoc[0].m_fY, aMadrigosaLoc[0].m_fZ);
                 m_uiMadrigosaSpellTimer = 0;
                 break;
             case YELL_MADR_TRAP:
@@ -338,7 +333,6 @@ struct MANGOS_DLL_DECL boss_brutallusAI : public ScriptedAI, private DialogueHel
                 }
                 break;
             case YELL_INTRO_CHARGE:
-                SetCombatMovement(true);
                 m_bCanDoMeleeAttack = true;
                 if (m_creature->getVictim())
                     m_creature->GetMotionMaster()->MoveChase(m_creature->getVictim());
@@ -351,8 +345,6 @@ struct MANGOS_DLL_DECL boss_brutallusAI : public ScriptedAI, private DialogueHel
                 break;
             case YELL_INTRO_TAUNT:
                 DoCastSpellIfCan(m_creature, SPELL_BREAK_ICE);
-                if (GameObject* pIceWall = m_pInstance->GetSingleGameObjectFromStorage(GO_ICE_BARRIER))
-                    pIceWall->SetGoState(GO_STATE_ACTIVE_ALTERNATIVE); //TODO: Drop me when SPELL_BREAK_ICE fixed
                 m_bIsIntroInProgress = false;
                 break;
         }
@@ -481,8 +473,7 @@ bool EffectAuraDummy_spell_aura_dummy_npc_brutallus_cloud(const Aura* pAura, boo
                 if (Creature* pMadrigosa = pInstance->GetSingleCreatureFromStorage(NPC_MADRIGOSA))
                 {
                     // Set respawn pos to current pos
-                    CreatureCreatePos madrigosaPos(pMadrigosa->GetMap(), pMadrigosa->GetPosition());
-                    pMadrigosa->SetRespawnCoord(madrigosaPos);
+                    pMadrigosa->SetRespawnCoord(pMadrigosa->GetPositionX(), pMadrigosa->GetPositionY(), pMadrigosa->GetPositionZ(), pMadrigosa->GetOrientation());
 
                     pMadrigosa->CastSpell(pMadrigosa, SPELL_FELBLAZE_PREVIZUAL, true);
                     pMadrigosa->ForcedDespawn(10000);

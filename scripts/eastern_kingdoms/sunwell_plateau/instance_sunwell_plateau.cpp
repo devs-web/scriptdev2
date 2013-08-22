@@ -1,5 +1,4 @@
 /* Copyright (C) 2006 - 2013 ScriptDev2 <http://www.scriptdev2.com/>
- * Copyright (C) 2011 - 2013 MangosR2 <http://github.com/mangosR2/>
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -36,17 +35,20 @@ EndScriptData */
 
 static const DialogueEntry aFelmystOutroDialogue[] =
 {
-    {NPC_KALECGOS,          0,              10000},
-    {SAY_KALECGOS_OUTRO,    NPC_KALECGOS,   10000},
-    {SPELL_OPEN_BACK_DOOR,  0,              0},
+    {NPC_KALECGOS_MADRIGOSA, 0,                        10000},
+    {SAY_KALECGOS_OUTRO,     NPC_KALECGOS_MADRIGOSA,   5000},
+    {NPC_FELMYST,            0,                        5000},
+    {SPELL_OPEN_BACK_DOOR,   0,                        9000},
+    {NPC_BRUTALLUS,          0,                        0},
     {0, 0, 0},
 };
 
 instance_sunwell_plateau::instance_sunwell_plateau(Map* pMap) : ScriptedInstance(pMap), DialogueHelper(aFelmystOutroDialogue),
-    m_uiMuruBerserkTimer(0),
     m_uiDeceiversKilled(0),
+    m_uiSpectralRealmTimer(5000),
     m_uiKalecRespawnTimer(0),
-    m_uiSpectralRealmTimer(5000)
+    m_uiMuruBerserkTimer(0),
+    m_uiKiljaedenYellTimer(90000)
 {
     Initialize();
 }
@@ -79,7 +81,7 @@ void instance_sunwell_plateau::OnPlayerEnter(Player* pPlayer)
         return;
 
     // Summon Felmyst in reload case
-    pPlayer->SummonCreature(NPC_FELMYST, aMadrigosaGroundLoc[0], aMadrigosaGroundLoc[1], aMadrigosaGroundLoc[2], aMadrigosaGroundLoc[3], TEMPSUMMON_DEAD_DESPAWN, 0);
+    pPlayer->SummonCreature(NPC_FELMYST, aMadrigosaLoc[0].m_fX, aMadrigosaLoc[0].m_fY, aMadrigosaLoc[0].m_fZ, aMadrigosaLoc[0].m_fO, TEMPSUMMON_DEAD_DESPAWN, 0);
 }
 
 void instance_sunwell_plateau::OnCreatureCreate(Creature* pCreature)
@@ -90,9 +92,11 @@ void instance_sunwell_plateau::OnCreatureCreate(Creature* pCreature)
         case NPC_KALECGOS_HUMAN:
         case NPC_SATHROVARR:
         case NPC_FLIGHT_TRIGGER_LEFT:
+        case NPC_FLIGHT_TRIGGER_RIGHT:
         case NPC_MADRIGOSA:
         case NPC_BRUTALLUS:
         case NPC_FELMYST:
+        case NPC_KALECGOS_MADRIGOSA:
         case NPC_ALYTHESS:
         case NPC_SACROLASH:
         case NPC_MURU:
@@ -107,6 +111,15 @@ void instance_sunwell_plateau::OnCreatureCreate(Creature* pCreature)
             break;
         case NPC_DECEIVER:
             m_lDeceiversGuidList.push_back(pCreature->GetObjectGuid());
+            break;
+        case NPC_WORLD_TRIGGER:
+            // sort triggers for flightpath
+            if (pCreature->GetPositionZ() < 51.0f)
+                m_lAllFlightTriggersList.push_back(pCreature->GetObjectGuid());
+            break;
+        case NPC_WORLD_TRIGGER_LARGE:
+            if (pCreature->GetPositionY() < 523.0f)
+                m_lBackdoorTriggersList.push_back(pCreature->GetObjectGuid());
             break;
     }
 }
@@ -151,8 +164,6 @@ void instance_sunwell_plateau::OnObjectCreate(GameObject* pGo)
                 pGo->SetGoState(GO_STATE_ACTIVE);
             break;
         case GO_FIRST_GATE:
-            if (m_auiEncounter[TYPE_FELMYST] == DONE)
-                pGo->SetGoState(GO_STATE_ACTIVE);
             break;
         case GO_SECOND_GATE:
             if (m_auiEncounter[TYPE_EREDAR_TWINS] == DONE)
@@ -169,6 +180,11 @@ void instance_sunwell_plateau::OnObjectCreate(GameObject* pGo)
         case GO_THIRD_GATE:
             if (m_auiEncounter[TYPE_MURU] == DONE)
                 pGo->SetGoState(GO_STATE_ACTIVE);
+            break;
+        case GO_ORB_BLUE_FLIGHT_1:
+        case GO_ORB_BLUE_FLIGHT_2:
+        case GO_ORB_BLUE_FLIGHT_3:
+        case GO_ORB_BLUE_FLIGHT_4:
             break;
 
         default:
@@ -201,19 +217,13 @@ void instance_sunwell_plateau::SetData(uint32 uiType, uint32 uiData)
             break;
         case TYPE_BRUTALLUS:
             m_auiEncounter[uiType] = uiData;
-            // Temporary - until spells 46609 and 46637 are properly fixed
-            if (uiData == SPECIAL)
-                DoUseDoorOrButton(GO_ICE_BARRIER, MINUTE);
             break;
         case TYPE_FELMYST:
             m_auiEncounter[uiType] = uiData;
             if (uiData == DONE)
-            {
-                StartNextDialogueText(NPC_KALECGOS);
-                // Temporary - until spell 46650 is properly fixed
-                DoUseDoorOrButton(GO_FIRE_BARRIER);
-                DoUseDoorOrButton(GO_FIRST_GATE);
-            }
+                StartNextDialogueText(NPC_KALECGOS_MADRIGOSA);
+            else if (uiData == IN_PROGRESS)
+                DoSortFlightTriggers();
             break;
         case TYPE_EREDAR_TWINS:
             m_auiEncounter[uiType] = uiData;
@@ -240,6 +250,12 @@ void instance_sunwell_plateau::SetData(uint32 uiType, uint32 uiData)
             if (uiData == FAIL)
             {
                 m_uiDeceiversKilled = 0;
+
+                // Reset Orbs
+                DoToggleGameObjectFlags(GO_ORB_BLUE_FLIGHT_1, GO_FLAG_NO_INTERACT, true);
+                DoToggleGameObjectFlags(GO_ORB_BLUE_FLIGHT_2, GO_FLAG_NO_INTERACT, true);
+                DoToggleGameObjectFlags(GO_ORB_BLUE_FLIGHT_3, GO_FLAG_NO_INTERACT, true);
+                DoToggleGameObjectFlags(GO_ORB_BLUE_FLIGHT_4, GO_FLAG_NO_INTERACT, true);
 
                 // Respawn deceivers
                 for (GuidList::const_iterator itr = m_lDeceiversGuidList.begin(); itr != m_lDeceiversGuidList.end(); ++itr)
@@ -298,7 +314,7 @@ void instance_sunwell_plateau::Update(uint32 uiDiff)
     // Muru berserk timer; needs to be done here because it involves two distinct creatures
     if (m_auiEncounter[TYPE_MURU] == IN_PROGRESS)
     {
-        if (m_uiMuruBerserkTimer <= uiDiff)
+        if (m_uiMuruBerserkTimer < uiDiff)
         {
             if (Creature* pEntrpius = GetSingleCreatureFromStorage(NPC_ENTROPIUS, true))
                 pEntrpius->CastSpell(pEntrpius, SPELL_MURU_BERSERK, true);
@@ -315,16 +331,13 @@ void instance_sunwell_plateau::Update(uint32 uiDiff)
     {
         if (m_uiKiljaedenYellTimer < uiDiff)
         {
-            if (Creature* pKiljaeden = GetSingleCreatureFromStorage(NPC_KILJAEDEN_CONTROLLER))
+            switch (urand(0, 4))
             {
-                switch (urand(0, 4))
-                {
-                    case 0: DoScriptText(SAY_ORDER_1, pKiljaeden); break;
-                    case 1: DoScriptText(SAY_ORDER_2, pKiljaeden); break;
-                    case 2: DoScriptText(SAY_ORDER_3, pKiljaeden); break;
-                    case 3: DoScriptText(SAY_ORDER_4, pKiljaeden); break;
-                    case 4: DoScriptText(SAY_ORDER_5, pKiljaeden); break;
-                }
+                case 0: DoOrSimulateScriptTextForThisInstance(SAY_ORDER_1, NPC_KILJAEDEN_CONTROLLER); break;
+                case 1: DoOrSimulateScriptTextForThisInstance(SAY_ORDER_2, NPC_KILJAEDEN_CONTROLLER); break;
+                case 2: DoOrSimulateScriptTextForThisInstance(SAY_ORDER_3, NPC_KILJAEDEN_CONTROLLER); break;
+                case 3: DoOrSimulateScriptTextForThisInstance(SAY_ORDER_4, NPC_KILJAEDEN_CONTROLLER); break;
+                case 4: DoOrSimulateScriptTextForThisInstance(SAY_ORDER_5, NPC_KILJAEDEN_CONTROLLER); break;
             }
             m_uiKiljaedenYellTimer = 90000;
         }
@@ -356,24 +369,100 @@ void instance_sunwell_plateau::Load(const char* in)
     OUT_LOAD_INST_DATA_COMPLETE;
 }
 
+static bool sortByPositionX(Creature* pFirst, Creature* pSecond)
+{
+    return pFirst && pSecond && pFirst->GetPositionX() > pSecond->GetPositionX();
+}
+
+void instance_sunwell_plateau::DoSortFlightTriggers()
+{
+    if (m_lAllFlightTriggersList.empty())
+    {
+        script_error_log("Instance Sunwell Plateau: ERROR Failed to load flight triggers for creature id %u.", NPC_FELMYST);
+        return;
+    }
+
+    std::list<Creature*> lTriggers;                         // Valid pointers, only used locally
+    for (GuidList::const_iterator itr = m_lAllFlightTriggersList.begin(); itr != m_lAllFlightTriggersList.end(); ++itr)
+    {
+        if (Creature* pTrigger = instance->GetCreature(*itr))
+            lTriggers.push_back(pTrigger);
+    }
+
+    if (lTriggers.empty())
+        return;
+
+    // sort the flight triggers; first by position X, then group them by Y (left and right)
+    lTriggers.sort(sortByPositionX);
+    for (std::list<Creature*>::iterator itr = lTriggers.begin(); itr != lTriggers.end(); ++itr)
+    {
+        if ((*itr)->GetPositionY() < 600.0f)
+            m_vRightFlightTriggersVect.push_back((*itr)->GetObjectGuid());
+        else
+            m_vLeftFlightTriggersVect.push_back((*itr)->GetObjectGuid());
+    }
+}
+
+ObjectGuid instance_sunwell_plateau::SelectFelmystFlightTrigger(bool bLeftSide, uint8 uiIndex)
+{
+    // Return the flight trigger from the selected index
+    GuidVector& vTemp = bLeftSide ? m_vLeftFlightTriggersVect : m_vRightFlightTriggersVect;
+
+    if (uiIndex >= vTemp.size())
+        return ObjectGuid();
+
+    return vTemp[uiIndex];
+}
+
+void instance_sunwell_plateau::DoEjectSpectralPlayers()
+{
+    for (GuidSet::const_iterator itr = m_spectralRealmPlayers.begin(); itr != m_spectralRealmPlayers.end(); ++itr)
+    {
+        if (Player* pPlayer = instance->GetPlayer(*itr))
+        {
+            if (!pPlayer->HasAura(SPELL_SPECTRAL_REALM_AURA))
+                continue;
+
+            pPlayer->CastSpell(pPlayer, SPELL_TELEPORT_NORMAL_REALM, true);
+            pPlayer->CastSpell(pPlayer, SPELL_SPECTRAL_EXHAUSTION, true);
+            pPlayer->RemoveAurasDueToSpell(SPELL_SPECTRAL_REALM_AURA);
+        }
+    }
+}
+
 void instance_sunwell_plateau::JustDidDialogueStep(int32 iEntry)
 {
     switch (iEntry)
     {
-        case NPC_KALECGOS:
+        case NPC_KALECGOS_MADRIGOSA:
             if (Creature* pTrigger = GetSingleCreatureFromStorage(NPC_FLIGHT_TRIGGER_LEFT))
             {
-                if (Creature* pKalec = pTrigger->SummonCreature(NPC_KALECGOS, pTrigger->GetPositionX(), pTrigger->GetPositionY(), pTrigger->GetPositionZ(), 0, TEMPSUMMON_TIMED_DESPAWN, 1 * MINUTE * IN_MILLISECONDS))
+                if (Creature* pKalec = pTrigger->SummonCreature(NPC_KALECGOS_MADRIGOSA, aKalecLoc[0].m_fX, aKalecLoc[0].m_fY, aKalecLoc[0].m_fZ, aKalecLoc[0].m_fO, TEMPSUMMON_CORPSE_DESPAWN, 0))
                 {
                     pKalec->SetWalk(false);
                     pKalec->SetLevitate(true);
-                    pKalec->GetMotionMaster()->MovePoint(0, aMadrigosaFlyLoc[0], aMadrigosaFlyLoc[1], aMadrigosaFlyLoc[2]);
+                    pKalec->GetMotionMaster()->MovePoint(0, aKalecLoc[1].m_fX, aKalecLoc[1].m_fY, aKalecLoc[1].m_fZ, false);
                 }
             }
             break;
+        case NPC_FELMYST:
+            if (Creature* pKalec = GetSingleCreatureFromStorage(NPC_KALECGOS_MADRIGOSA))
+                pKalec->GetMotionMaster()->MovePoint(0, aKalecLoc[2].m_fX, aKalecLoc[2].m_fY, aKalecLoc[2].m_fZ, false);
+            break;
         case SPELL_OPEN_BACK_DOOR:
-            if (Creature* pKalec = GetSingleCreatureFromStorage(NPC_KALECGOS))
-                pKalec->CastSpell(pKalec, SPELL_OPEN_BACK_DOOR, true);
+            if (Creature* pKalec = GetSingleCreatureFromStorage(NPC_KALECGOS_MADRIGOSA))
+            {
+                // ToDo: update this when the AoE spell targeting will support many explicit target. Kalec should target all creatures from the list
+                if (Creature* pTrigger = instance->GetCreature(m_lBackdoorTriggersList.front()))
+                    pKalec->CastSpell(pTrigger, SPELL_OPEN_BACK_DOOR, true);
+            }
+            break;
+        case NPC_BRUTALLUS:
+            if (Creature* pKalec = GetSingleCreatureFromStorage(NPC_KALECGOS_MADRIGOSA))
+            {
+                pKalec->ForcedDespawn(10000);
+                pKalec->GetMotionMaster()->MovePoint(0, aKalecLoc[3].m_fX, aKalecLoc[3].m_fY, aKalecLoc[3].m_fZ, false);
+            }
             break;
     }
 }
