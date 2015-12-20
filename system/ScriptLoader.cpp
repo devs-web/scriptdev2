@@ -12,6 +12,7 @@ extern void AddSC_battlegroundIC();
 // custom
 extern void AddSC_mob_teleguy();
 extern void AddSC_npc_arena_honor();
+extern void AddSC_transmogrify_script();
 
 // examples
 extern void AddSC_example_creature();
@@ -578,6 +579,7 @@ void AddScripts()
     // custom
     AddSC_mob_teleguy();
     AddSC_npc_arena_honor();
+    AddSC_transmogrify_script();
 
     // examples
     AddSC_example_creature();
