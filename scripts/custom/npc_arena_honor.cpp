@@ -50,9 +50,9 @@ bool GossipSelect_npc_arena_honor(Player *pPlayer, Creature *pCreature, uint32 s
 #ifdef SD2_WORLD_WOTLK
     if (action == GOSSIP_ACTION_INFO_DEF + 1)
     {
-        if (pPlayer->GetHonorPoints() >= 1000)
+        if (pPlayer->GetHonorPoints() >= 3000)
         {
-            pPlayer->ModifyHonorPoints(-1000);
+            pPlayer->ModifyHonorPoints(-3000);
             pPlayer->ModifyArenaPoints(+50);
         }
         else
@@ -60,9 +60,9 @@ bool GossipSelect_npc_arena_honor(Player *pPlayer, Creature *pCreature, uint32 s
     }
     if (action == GOSSIP_ACTION_INFO_DEF + 2)
     {
-        if (pPlayer->GetHonorPoints() >= 10000)
+        if (pPlayer->GetHonorPoints() >= 30000)
         {
-            pPlayer->ModifyHonorPoints(-10000);
+            pPlayer->ModifyHonorPoints(-30000);
             pPlayer->ModifyArenaPoints(+500);
         }
         else
@@ -73,7 +73,7 @@ bool GossipSelect_npc_arena_honor(Player *pPlayer, Creature *pCreature, uint32 s
         if (pPlayer->GetArenaPoints() >= 100)
         {
             pPlayer->ModifyArenaPoints(-100);
-            pPlayer->ModifyHonorPoints(+2000);
+            pPlayer->ModifyHonorPoints(+6000);
         }
         else
             DoScriptText(UNSUCCESSFUL_ARENA, pCreature);
@@ -83,7 +83,7 @@ bool GossipSelect_npc_arena_honor(Player *pPlayer, Creature *pCreature, uint32 s
         if (pPlayer->GetArenaPoints() >= 1000)
         {
             pPlayer->ModifyArenaPoints(-1000);
-            pPlayer->ModifyHonorPoints(+20000);
+            pPlayer->ModifyHonorPoints(+60000);
         }
         else
             DoScriptText(UNSUCCESSFUL_ARENA, pCreature);
