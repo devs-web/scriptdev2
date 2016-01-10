@@ -35,6 +35,17 @@ EndScriptData */
 
 bool GossipHello_npc_arena_honor(Player* pPlayer, Creature *pCreature)
 {
+    QueryResult *result = LoginDatabase.PQuery("select `EventBonus` from account where `id` = '%u'", pPlayer->GetSession()->GetAccountId());
+    if (result)
+    {
+        Field* fields = result->Fetch();
+        uint32 ev = fields[0].GetUInt32();
+        
+        char buff_text[100];
+        sprintf(buff_text, "You have %u EV", ev);
+        pCreature->MonsterWhisper(buff_text, pPlayer);
+    }
+
 #ifdef SD2_WORLD_WOTLK
     pPlayer->ADD_GOSSIP_ITEM_ID(GOSSIP_ICON_CHAT, GOSSIP_ITEM_HONOR_TO_ARENA, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
     pPlayer->ADD_GOSSIP_ITEM_ID(GOSSIP_ICON_CHAT, GOSSIP_ITEM_HONOR_TO_ARENA1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
