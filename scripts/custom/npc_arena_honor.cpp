@@ -23,6 +23,7 @@ EndScriptData */
 #include "precompiled.h"
 #include "sc_creature.h"
 #include "sc_gossip.h"
+#include "Database/DatabaseEnv.h"
 
 #define GOSSIP_ITEM_ARENA_TO_HONOR  -3000770
 #define GOSSIP_ITEM_ARENA_TO_HONOR1 -3000771
@@ -39,6 +40,8 @@ bool GossipHello_npc_arena_honor(Player* pPlayer, Creature *pCreature)
     pPlayer->ADD_GOSSIP_ITEM_ID(GOSSIP_ICON_CHAT, GOSSIP_ITEM_HONOR_TO_ARENA1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
     pPlayer->ADD_GOSSIP_ITEM_ID(GOSSIP_ICON_CHAT, GOSSIP_ITEM_ARENA_TO_HONOR, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
     pPlayer->ADD_GOSSIP_ITEM_ID(GOSSIP_ICON_CHAT, GOSSIP_ITEM_ARENA_TO_HONOR1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 4);
+    pPlayer->ADD_GOSSIP_ITEM_ID(GOSSIP_ICON_CHAT, "1 EV -> 200 AP", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 5);
+    pPlayer->ADD_GOSSIP_ITEM_ID(GOSSIP_ICON_CHAT, "1 EV -> 10000 HP", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 6);
     pPlayer->SEND_GOSSIP_MENU(3961,pCreature->GetObjectGuid());
 #endif
     return true;
@@ -87,6 +90,48 @@ bool GossipSelect_npc_arena_honor(Player *pPlayer, Creature *pCreature, uint32 s
         }
         else
             DoScriptText(UNSUCCESSFUL_ARENA, pCreature);
+    }
+    if (action == GOSSIP_ACTION_INFO_DEF + 5)
+    {
+        QueryResult *result = LoginDatabase.PQuery("select `EventBonus` from account where `id` = '%u'", pPlayer->GetSession()->GetAccountId());
+        if (result)
+        {
+            Field* fields = result->Fetch();
+            uint32 ev = fields[0].GetUInt32();
+            
+            if (ev >= 1)
+            {
+                LoginDatabase.PExecute("UPDATE  account SET `EventBonus`=(`EventBonus` - 1) WHERE `id` = '%u'", pPlayer->GetSession()->GetAccountId());
+                pPlayer->ModifyArenaPoints(+200);
+                pCreature->MonsterWhisper("Add +200 Arena Points", pPlayer);
+                pPlayer->SaveToDB();
+            }
+            else
+            {
+                pCreature->MonsterWhisper("Enough Event bonuses", pPlayer);
+            }
+        }
+    }
+    if (action == GOSSIP_ACTION_INFO_DEF + 6)
+    {
+        QueryResult *result = LoginDatabase.PQuery("select `EventBonus` from account where `id` = '%u'", pPlayer->GetSession()->GetAccountId());
+        if (result)
+        {
+            Field* fields = result->Fetch();
+            uint32 ev = fields[0].GetUInt32();
+            
+            if (ev >= 1)
+            {
+                LoginDatabase.PExecute("UPDATE  account SET `EventBonus`=(`EventBonus` - 1) WHERE `id` = '%u'", pPlayer->GetSession()->GetAccountId());
+                pPlayer->ModifyHonorPoints(+10000);
+                pCreature->MonsterWhisper("Add +10000 Honor Points", pPlayer);
+                pPlayer->SaveToDB();
+            }
+            else
+            {
+                pCreature->MonsterWhisper("Enough Event bonuses", pPlayer);
+            }
+        }
     }
 #endif
     pPlayer->CLOSE_GOSSIP_MENU();
