@@ -13,9 +13,7 @@ enum
 
 bool GossipHello_transmogrify_script(Player* player, Creature* _Creature)
 {
-    _Creature->MonsterWhisper("Если хочешь убрать модель предмета, положи в первый слот.", player);
-    _Creature->MonsterWhisper("В первый слот сумки положи вещь, которой хочешь изменить вид.", player);
-    _Creature->MonsterWhisper("Во второй слот положи вещь, с которой ты хочешь взять модель.", player);
+    _Creature->MonsterWhisper("Если хочешь убрать модель предмета, положи в первый слот. В первый слот сумки положи вещь, которой хочешь изменить вид. Во второй слот положи вещь, с которой ты хочешь взять модель.", player);
 
     player->ADD_GOSSIP_ITEM(0, "Сделать обмен!" , GOSSIP_SENDER_MAIN, 1203);
     player->ADD_GOSSIP_ITEM(0, "Очистить модель." , GOSSIP_SENDER_MAIN, 1204);
