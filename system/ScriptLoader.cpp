@@ -15,6 +15,7 @@ extern void AddSC_npc_arena_honor();
 extern void AddSC_transmogrify_script();
 extern void AddSC_npcAllTrainer_script();
 extern void AddSC_vendor_multi();
+extern void AddSC_npc_vip_script();
 
 // examples
 extern void AddSC_example_creature();
@@ -584,6 +585,7 @@ void AddScripts()
     AddSC_transmogrify_script();
     AddSC_npcAllTrainer_script();
     AddSC_vendor_multi();
+    AddSC_npc_vip_script();
 
     // examples
     AddSC_example_creature();
