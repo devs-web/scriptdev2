@@ -81,10 +81,10 @@ void Changecust (Player* player)
 
 bool GossipHello_npc_vip_script(Player* player, Creature* _Creature)
 {
-    player->ADD_GOSSIP_ITEM(5, "Бафы" , GOSSIP_SENDER_MAIN, 1209);
-    player->ADD_GOSSIP_ITEM(5, "Смена фракции" , GOSSIP_SENDER_MAIN, 1210);
-    player->ADD_GOSSIP_ITEM(5, "Смена расы" , GOSSIP_SENDER_MAIN, 1211);
-    player->ADD_GOSSIP_ITEM(5, "Смена вида" , GOSSIP_SENDER_MAIN, 1212);
+    player->ADD_GOSSIP_ITEM(5, "Бафы" , GOSSIP_SENDER_MAIN, 5209);
+    player->ADD_GOSSIP_ITEM(5, "Смена фракции" , GOSSIP_SENDER_MAIN, 5210);
+    player->ADD_GOSSIP_ITEM(5, "Смена расы" , GOSSIP_SENDER_MAIN, 5211);
+    player->ADD_GOSSIP_ITEM(5, "Смена вида" , GOSSIP_SENDER_MAIN, 5212);
 
     player->SEND_GOSSIP_MENU(DEFAULT_GOSSIP_MESSAGE,_Creature->GetObjectGuid());
     return true;
@@ -101,10 +101,10 @@ bool GossipSelect_npc_vip_script(Player* player, Creature* _Creature, uint32 sen
 
     switch (action)
     {
-        case 1209: BufsAdd (player); break;
-        case 1210: Changefaction (player); break;
-        case 1211: Changerace (player); break;
-        case 1212: Changecust (player); break;
+        case 5209: BufsAdd (player); break;
+        case 5210: Changefaction (player); break;
+        case 5211: Changerace (player); break;
+        case 5212: Changecust (player); break;
 
         default: "";
     }
