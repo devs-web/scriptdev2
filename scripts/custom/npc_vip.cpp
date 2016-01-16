@@ -96,7 +96,7 @@ bool GossipSelect_npc_vip_script(Player* player, Creature* _Creature, uint32 sen
     {
         player->CLOSE_GOSSIP_MENU();
         _Creature->MonsterWhisper("Ты не VIP игрок!", player);
-        return false;
+        return true;
     }
 
     switch (action)
@@ -106,7 +106,7 @@ bool GossipSelect_npc_vip_script(Player* player, Creature* _Creature, uint32 sen
         case 5211: Changerace (player); break;
         case 5212: Changecust (player); break;
 
-        default: "";
+        default: return true;
     }
 
     player->CLOSE_GOSSIP_MENU();
