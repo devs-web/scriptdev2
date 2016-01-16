@@ -52,7 +52,7 @@ void LearnWeapon(Player* player, Creature* _Creature)
 {
     uint8 PlayerClass = ((Unit*)player)->getClass();
 
-    int CLASS_WARRIOR_WEAPONS[11]     = {5011, 199, 202, 200, 198, 1180, 15590, 264, 2567, 266, 227};
+    int CLASS_WARRIOR_WEAPONS[12]     = {5011, 199, 202, 200, 198, 1180, 15590, 264, 2567, 266, 227, 197};
     int CLASS_PALADIN_WEAPONS[6]      = {199, 197, 200, 198, 196};
     int CLASS_HUNTER_WEAPONS[9]       = {5011, 202, 200, 15590, 2567, 201, 266, 227, 196};
     int CLASS_ROGUE_WEAPONS[7]        = {5011, 198, 15590, 264, 201, 266, 196};
@@ -65,7 +65,7 @@ void LearnWeapon(Player* player, Creature* _Creature)
     
     switch(PlayerClass)
     {
-        case CLASS_WARRIOR:      _LearnWeapon(player, _Creature, CLASS_WARRIOR_WEAPONS, 10); break;
+        case CLASS_WARRIOR:      _LearnWeapon(player, _Creature, CLASS_WARRIOR_WEAPONS, 11); break;
         case CLASS_PALADIN:      _LearnWeapon(player, _Creature, CLASS_PALADIN_WEAPONS, 5); break;
         case CLASS_HUNTER:       _LearnWeapon(player, _Creature, CLASS_HUNTER_WEAPONS, 8); break;
         case CLASS_ROGUE:        _LearnWeapon(player, _Creature, CLASS_ROGUE_WEAPONS, 6); break;
